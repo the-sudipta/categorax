@@ -14,9 +14,10 @@ It was created because file tagging should not feel like a programmer-only featu
 - Adds one category to each item, such as `Work`, `Personal`, `Study`, or `Finance`.
 - Shows nearby tag and category suggestions so users do not need to remember previous labels.
 - Browses a folder tree grouped by tag or category.
+- Creates Explorer-friendly grouped shortcut views under the Categorax install folder.
 - Works from the terminal on Windows, macOS, and Linux.
 - Adds a Windows Explorer right-click menu so selected files and folders can be opened directly in Categorax.
-- Keeps metadata in small `.categorax/tags.json` files beside your content, making it easy to copy, backup, inspect, and version.
+- Keeps metadata in one `.categorax/tags.json` database beside the Categorax executable, so your tagged folders do not get extra `.categorax` folders scattered everywhere.
 - Ships with a backgroundless icon that is embedded into the Windows `.exe`, included in the macOS `.app`, and packaged for Linux desktop launchers.
 
 ## Why I Created This
@@ -134,19 +135,46 @@ Browse everything under a folder:
 categorax browse --root "./"
 ```
 
-## How Storage Works
+Create File Explorer views grouped by category and tag:
 
-Categorax stores metadata in a small JSON file:
-
-```text
-YourFolder/
-  file-a.pdf
-  file-b.jpg
-  .categorax/
-    tags.json
+```sh
+categorax explorer-view --root "./"
 ```
 
-That file records tags and categories for items in the folder. This makes Categorax predictable across Windows, macOS, and Linux.
+On Windows this creates shortcut files under:
+
+```text
+C:\Tools\Categorax\.categorax\Explorer Views\
+  By Category\
+  By Tag\
+```
+
+Open those folders in File Explorer to browse your tagged files and folders by category or tag.
+
+## How Storage Works
+
+Categorax stores metadata in one small JSON file beside the executable:
+
+```text
+C:\Tools\Categorax\
+  categorax.exe
+  .categorax\
+    tags.json
+    Explorer Views\
+```
+
+That file records tags and categories using the full paths of tagged files and folders.
+
+If you used an older Categorax build that created `.categorax` folders beside your files, newer Categorax builds can still read those older records when you browse or touch those items. New writes go to the central database beside `categorax.exe`.
+
+## File Explorer Sorting
+
+Windows File Explorer cannot sort by Categorax's private JSON database as if it were a native Explorer column. To make Explorer browsing practical, Categorax can generate grouped shortcut folders:
+
+- `By Category`
+- `By Tag`
+
+These folders contain shortcuts pointing to the original files and folders. Your originals are not moved or copied.
 
 ## Build From Source
 
@@ -179,15 +207,15 @@ The included workflow builds release artifacts for:
 To create a release, push a version tag:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 You can also run the workflow manually from GitHub Actions.
 
 ## Current Notes
 
-Categorax uses its own portable tag database instead of relying only on operating-system metadata. This makes the tool consistent and easy to understand. Future versions may optionally sync tags into Windows Explorer metadata where the platform supports it well.
+Categorax uses its own portable tag database instead of relying only on operating-system metadata. This makes the tool consistent and easy to understand. Explorer-friendly views are generated as shortcuts, so the original files and folders stay exactly where they are.
 
 ## License
 

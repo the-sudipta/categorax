@@ -114,6 +114,8 @@ jobs:
             - Guided numbered menu for non-programmer-friendly tagging
             - Tags and one main category for files and folders
             - Browse folders grouped by tag or category
+            - Central `.categorax` database beside the executable
+            - Explorer-friendly shortcut views grouped by tag and category
             - Windows Explorer right-click integration
             - Compatible Windows Terminal launch command with CMD fallback
             - Embedded Windows executable icon

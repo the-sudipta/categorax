@@ -3,8 +3,10 @@ use clap::{Parser, Subcommand};
 use console::{style, Term};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
+use std::hash::{Hash, Hasher};
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -75,6 +77,11 @@ enum Commands {
         #[arg(short, long, value_name = "ROOT")]
         root: Option<PathBuf>,
     },
+    /// Create Explorer-friendly folders grouped by category and tag.
+    ExplorerView {
+        #[arg(short, long, value_name = "ROOT")]
+        root: Option<PathBuf>,
+    },
     /// Install the Windows Explorer right-click menu for this executable.
     InstallContext,
     /// Remove the Windows Explorer right-click menu.
@@ -97,7 +104,6 @@ struct TagRecord {
 #[derive(Debug, Clone)]
 struct Target {
     absolute: PathBuf,
-    store_path: PathBuf,
     key: String,
 }
 
@@ -153,6 +159,10 @@ fn run() -> Result<()> {
         Some(Commands::Browse { root }) => {
             browse_library(root.unwrap_or(std::env::current_dir()?))?
         }
+        Some(Commands::ExplorerView { root }) => {
+            let view = build_explorer_views(root.unwrap_or(std::env::current_dir()?))?;
+            open_in_file_explorer(&view)?;
+        }
         Some(Commands::InstallContext) => install_context_menu()?,
         Some(Commands::UninstallContext) => uninstall_context_menu()?,
         None => interactive_menu(resolve_targets(cli.path)?)?,
@@ -183,6 +193,7 @@ fn interactive_menu(targets: Vec<Target>) -> Result<()> {
                 "Set category",
                 "View current details",
                 "Browse by tag/category",
+                "Build/open Explorer views",
                 "Install Windows right-click menu",
                 "Help",
                 "Exit",
@@ -195,9 +206,10 @@ fn interactive_menu(targets: Vec<Target>) -> Result<()> {
             3 => set_category_flow(&targets)?,
             4 => show_targets(&targets)?,
             5 => browse_flow(&targets)?,
-            6 => install_context_menu()?,
-            7 => print_help(),
-            8 | 0 => {
+            6 => explorer_view_flow(&targets)?,
+            7 => install_context_menu()?,
+            8 => print_help(),
+            9 | 0 => {
                 println!(
                     "{}",
                     style("Done. Your files are a little easier to find now.")
@@ -305,6 +317,24 @@ fn browse_flow(targets: &[Target]) -> Result<()> {
         .unwrap_or(std::env::current_dir()?);
     let answer = prompt_with_default("Folder to browse", &default_root.display().to_string())?;
     browse_library(PathBuf::from(answer))
+}
+
+fn explorer_view_flow(targets: &[Target]) -> Result<()> {
+    let default_root = targets
+        .first()
+        .and_then(|target| target.absolute.parent().map(Path::to_path_buf))
+        .unwrap_or(std::env::current_dir()?);
+    let answer = prompt_with_default(
+        "Folder to build Explorer views from",
+        &default_root.display().to_string(),
+    )?;
+    let view = build_explorer_views(PathBuf::from(answer))?;
+    println!(
+        "{} {}",
+        style("Explorer views ready at").green().bold(),
+        view.display()
+    );
+    open_in_file_explorer(&view)
 }
 
 fn browse_library(root: PathBuf) -> Result<()> {
@@ -416,28 +446,28 @@ where
     F: FnMut(&mut TagRecord),
 {
     require_targets(&targets)?;
-    let mut grouped: BTreeMap<PathBuf, Vec<Target>> = BTreeMap::new();
+    let store_path = store_path()?;
+    let mut store = load_store(&store_path)?;
     for target in targets {
-        grouped
-            .entry(target.store_path.clone())
-            .or_default()
-            .push(target);
-    }
-
-    for (store_path, targets) in grouped {
-        let mut store = load_store(&store_path)?;
-        for target in targets {
-            let record = store.records.entry(target.key).or_default();
-            change(record);
+        if !store.records.contains_key(&target.key) {
+            if let Some(record) = legacy_record_for(&target)? {
+                store.records.insert(target.key.clone(), record);
+            }
         }
-        save_store(&store_path, &store)?;
+        let record = store.records.entry(target.key).or_default();
+        change(record);
     }
+    save_store(&store_path, &store)?;
     Ok(())
 }
 
 fn read_record(target: &Target) -> Result<TagRecord> {
-    let store = load_store(&target.store_path)?;
-    Ok(store.records.get(&target.key).cloned().unwrap_or_default())
+    let store = load_store(&store_path()?)?;
+    if let Some(record) = store.records.get(&target.key).cloned() {
+        Ok(record)
+    } else {
+        Ok(legacy_record_for(target)?.unwrap_or_default())
+    }
 }
 
 fn resolve_targets(paths: Vec<PathBuf>) -> Result<Vec<Target>> {
@@ -447,23 +477,8 @@ fn resolve_targets(paths: Vec<PathBuf>) -> Result<Vec<Target>> {
             return Err(anyhow!("Path does not exist: {}", path.display()));
         }
         let absolute = absolute_path(&path)?;
-        let parent = absolute.parent().ok_or_else(|| {
-            anyhow!(
-                "Cannot tag a filesystem root directly: {}",
-                absolute.display()
-            )
-        })?;
-        let key = absolute
-            .file_name()
-            .and_then(|value| value.to_str())
-            .ok_or_else(|| anyhow!("Path has no usable file name: {}", absolute.display()))?
-            .to_string();
-        let store_path = parent.join(STORE_DIR).join(STORE_FILE);
-        targets.push(Target {
-            absolute,
-            store_path,
-            key,
-        });
+        let key = absolute.to_string_lossy().to_string();
+        targets.push(Target { absolute, key });
     }
     targets.sort_by(|a, b| a.absolute.cmp(&b.absolute));
     targets.dedup_by(|a, b| a.absolute == b.absolute);
@@ -489,8 +504,8 @@ fn load_store(path: &Path) -> Result<TagStore> {
     }
     let text =
         fs::read_to_string(path).with_context(|| format!("Cannot read {}", path.display()))?;
-    let mut store: TagStore =
-        serde_json::from_str(&text).with_context(|| format!("Cannot parse {}", path.display()))?;
+    let mut store: TagStore = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .with_context(|| format!("Cannot parse {}", path.display()))?;
     if store.version == 0 {
         store.version = 1;
     }
@@ -507,13 +522,42 @@ fn save_store(path: &Path, store: &TagStore) -> Result<()> {
     Ok(())
 }
 
+fn legacy_record_for(target: &Target) -> Result<Option<TagRecord>> {
+    let Some(parent) = target.absolute.parent() else {
+        return Ok(None);
+    };
+    let Some(file_name) = target.absolute.file_name().and_then(|value| value.to_str()) else {
+        return Ok(None);
+    };
+    let legacy_path = parent.join(STORE_DIR).join(STORE_FILE);
+    let legacy_store = load_store(&legacy_path)?;
+    Ok(legacy_store.records.get(file_name).cloned())
+}
+
+fn install_root() -> Result<PathBuf> {
+    let exe = std::env::current_exe().context("Cannot locate the Categorax executable")?;
+    exe.parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| anyhow!("Cannot locate the Categorax executable folder"))
+}
+
+fn store_path() -> Result<PathBuf> {
+    Ok(install_root()?.join(STORE_DIR).join(STORE_FILE))
+}
+
+fn explorer_views_root() -> Result<PathBuf> {
+    Ok(install_root()?.join(STORE_DIR).join("Explorer Views"))
+}
+
 fn collect_nearby_tags(targets: &[Target]) -> Result<Vec<String>> {
     let mut values = collect_current_tags(targets)?;
+    let store = load_store(&store_path()?)?;
     for target in targets {
         if let Some(parent) = target.absolute.parent() {
-            let store = load_store(&parent.join(STORE_DIR).join(STORE_FILE))?;
-            for record in store.records.values() {
-                values.extend(record.tags.iter().cloned());
+            for (path, record) in &store.records {
+                if Path::new(path).parent() == Some(parent) {
+                    values.extend(record.tags.iter().cloned());
+                }
             }
         }
     }
@@ -530,10 +574,13 @@ fn collect_current_tags(targets: &[Target]) -> Result<BTreeSet<String>> {
 
 fn collect_nearby_categories(targets: &[Target]) -> Result<Vec<String>> {
     let mut values = BTreeSet::new();
+    let store = load_store(&store_path()?)?;
     for target in targets {
         if let Some(parent) = target.absolute.parent() {
-            let store = load_store(&parent.join(STORE_DIR).join(STORE_FILE))?;
-            for record in store.records.values() {
+            for (path, record) in &store.records {
+                if Path::new(path).parent() != Some(parent) {
+                    continue;
+                }
                 if let Some(category) = &record.category {
                     if !category.trim().is_empty() {
                         values.insert(category.clone());
@@ -541,7 +588,11 @@ fn collect_nearby_categories(targets: &[Target]) -> Result<Vec<String>> {
                 }
             }
         }
-        if let Some(category) = read_record(target)?.category {
+        if let Some(category) = store
+            .records
+            .get(&target.key)
+            .and_then(|record| record.category.clone())
+        {
             values.insert(category);
         }
     }
@@ -549,6 +600,29 @@ fn collect_nearby_categories(targets: &[Target]) -> Result<Vec<String>> {
 }
 
 fn scan_library(root: &Path) -> Result<Vec<LibraryItem>> {
+    let mut items = Vec::new();
+    let root = absolute_path(root)?;
+    let store = load_store(&store_path()?)?;
+    for (key, record) in store.records {
+        let path = PathBuf::from(&key);
+        if !path.starts_with(&root) {
+            continue;
+        }
+        if record.tags.is_empty() && record.category.is_none() && record.note.is_none() {
+            continue;
+        }
+        items.push(LibraryItem { path, record });
+    }
+    for item in scan_legacy_library(&root)? {
+        if !items.iter().any(|existing| existing.path == item.path) {
+            items.push(item);
+        }
+    }
+    items.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(items)
+}
+
+fn scan_legacy_library(root: &Path) -> Result<Vec<LibraryItem>> {
     let mut items = Vec::new();
     for entry in WalkDir::new(root).into_iter().filter_map(Result::ok) {
         if !entry.file_type().is_file() || entry.file_name() != STORE_FILE {
@@ -575,8 +649,119 @@ fn scan_library(root: &Path) -> Result<Vec<LibraryItem>> {
             });
         }
     }
-    items.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(items)
+}
+
+fn build_explorer_views(root: PathBuf) -> Result<PathBuf> {
+    let root = absolute_path(&root)?;
+    let view_root = explorer_views_root()?;
+    let category_root = view_root.join("By Category");
+    let tag_root = view_root.join("By Tag");
+
+    if view_root.exists() {
+        fs::remove_dir_all(&view_root)
+            .with_context(|| format!("Cannot refresh {}", view_root.display()))?;
+    }
+    fs::create_dir_all(&category_root)?;
+    fs::create_dir_all(&tag_root)?;
+
+    let items = scan_library(&root)?;
+    if items.is_empty() {
+        println!(
+            "{} {}",
+            style("No Categorax tags found under").yellow().bold(),
+            root.display()
+        );
+        return Ok(view_root);
+    }
+
+    for item in &items {
+        let category = item
+            .record
+            .category
+            .clone()
+            .unwrap_or_else(|| "Uncategorized".to_string());
+        create_group_shortcut(&category_root, &category, &item.path)?;
+
+        if item.record.tags.is_empty() {
+            create_group_shortcut(&tag_root, "Untagged", &item.path)?;
+        } else {
+            for tag in &item.record.tags {
+                create_group_shortcut(&tag_root, tag, &item.path)?;
+            }
+        }
+    }
+
+    println!(
+        "{} {}",
+        style("Created Explorer shortcuts for").green().bold(),
+        format!("{} tagged item(s)", items.len())
+    );
+    Ok(view_root)
+}
+
+fn create_group_shortcut(group_root: &Path, group_name: &str, target: &Path) -> Result<()> {
+    let group_dir = group_root.join(safe_file_name(group_name));
+    fs::create_dir_all(&group_dir)?;
+    let label = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("item");
+    let link_name = format!("{}-{}.url", safe_file_name(label), short_hash(target));
+    let link_path = group_dir.join(link_name);
+    create_shortcut(&link_path, target)
+}
+
+fn create_shortcut(link_path: &Path, target: &Path) -> Result<()> {
+    let target_url = format!("file:///{}", target.to_string_lossy().replace('\\', "/"));
+    let contents = format!(
+        "[InternetShortcut]\r\nURL={}\r\nIconIndex=0\r\n",
+        target_url
+    );
+    fs::write(link_path, contents)
+        .with_context(|| format!("Cannot create shortcut {}", link_path.display()))?;
+    Ok(())
+}
+
+fn safe_file_name(value: &str) -> String {
+    let safe = value
+        .chars()
+        .map(|ch| match ch {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            ch if ch.is_control() => '_',
+            ch => ch,
+        })
+        .collect::<String>()
+        .trim()
+        .trim_end_matches('.')
+        .to_string();
+    if safe.is_empty() {
+        "Unnamed".to_string()
+    } else {
+        safe
+    }
+}
+
+fn short_hash(path: &Path) -> String {
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    format!("{:08x}", hasher.finish() as u32)
+}
+
+fn open_in_file_explorer(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        Command::new("explorer").arg(path).spawn()?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(path).spawn()?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(path).spawn()?;
+    }
+    Ok(())
 }
 
 fn explorer_launch(paths: Vec<PathBuf>) -> Result<()> {
