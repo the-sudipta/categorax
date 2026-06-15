@@ -66,7 +66,7 @@ The right-click integration is installed for the current user and does not requi
 
 The Windows executable includes the Categorax icon, so users do not need to download any separate icon file.
 
-If Windows Terminal is installed, Categorax uses it with a Categorax tab title and tab icon. If Windows Terminal is not installed, Categorax falls back to the normal Windows console/CMD behavior.
+If Windows Terminal is installed, Categorax uses it with a Categorax tab title. If Windows Terminal is not installed, Categorax falls back to the normal Windows console/CMD behavior. The executable itself still carries the Categorax icon.
 
 ## Guided Menu
 
@@ -179,8 +179,8 @@ The included workflow builds release artifacts for:
 To create a release, push a version tag:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 You can also run the workflow manually from GitHub Actions.

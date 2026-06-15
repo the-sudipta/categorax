@@ -115,6 +115,7 @@ jobs:
             - Tags and one main category for files and folders
             - Browse folders grouped by tag or category
             - Windows Explorer right-click integration
+            - Compatible Windows Terminal launch command with CMD fallback
             - Embedded Windows executable icon
             - macOS app bundle icon assets
             - Linux desktop launcher icon assets

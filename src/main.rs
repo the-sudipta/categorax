@@ -699,8 +699,8 @@ fn windows_terminal_command(exe: &str) -> String {
         .unwrap_or(false)
     {
         format!(
-            "wt.exe --title \"Categorax\" --icon \"{}\" \"{}\" launch --path \"%1\"",
-            exe, exe
+            "wt.exe --title \"Categorax\" \"{}\" launch --path \"%1\"",
+            exe
         )
     } else {
         format!("\"{}\" launch --path \"%1\"", exe)

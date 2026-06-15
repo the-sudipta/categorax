@@ -1,6 +1,6 @@
 [package]
 name = "categorax"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A friendly terminal-first file and folder tagging tool."
 license = "MIT"
