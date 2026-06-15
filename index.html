@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Categorax is a friendly terminal-first tool for tagging and categorizing files and folders.">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="assets/icons/favicon-48.png">
+  <link rel="shortcut icon" href="assets/icons/categorax.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+  <meta property="og:image" content="assets/icons/categorax-icon.png">
+  <title>Categorax - Friendly Tags for Files and Folders</title>
+  <style>
+    :root {
+      --ink: #18212f;
+      --muted: #5d6b7d;
+      --paper: #fbf8f1;
+      --cream: #fffdf8;
+      --cyan: #00a6b4;
+      --green: #2f9f73;
+      --rose: #ef6f6c;
+      --gold: #f3b43f;
+      --blue: #4865d9;
+      --line: rgba(24, 33, 47, .14);
+      --shadow: 0 24px 70px rgba(24, 33, 47, .16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 8%, rgba(243, 180, 63, .34), transparent 28%),
+        radial-gradient(circle at 92% 18%, rgba(0, 166, 180, .22), transparent 30%),
+        linear-gradient(180deg, #fffaf0 0%, #f5fbfa 55%, #fff8f2 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      width: min(1160px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(20px);
+      background: rgba(255, 253, 248, .78);
+      border-bottom: 1px solid var(--line);
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 72px;
+      gap: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.14rem;
+      font-weight: 900;
+      letter-spacing: .02em;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      background: rgba(255, 255, 255, .76);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 12px 24px rgba(0, 166, 180, .25);
+    }
+
+    .mark img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .links a {
+      padding: 10px 12px;
+      border-radius: 8px;
+    }
+
+    .links a:hover {
+      color: var(--ink);
+      background: rgba(24, 33, 47, .06);
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 18px;
+      color: white;
+      background: var(--ink);
+      border: 0;
+      border-radius: 8px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 16px 34px rgba(24, 33, 47, .18);
+    }
+
+    .button.secondary {
+      color: var(--ink);
+      background: rgba(255, 255, 255, .72);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+      align-items: center;
+      min-height: calc(100vh - 72px);
+      gap: 48px;
+      padding: 48px 0;
+    }
+
+    .hero-logo {
+      width: min(210px, 46vw);
+      height: auto;
+      margin-bottom: 14px;
+      filter: drop-shadow(0 20px 34px rgba(0, 166, 180, .22));
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      color: #245a4c;
+      background: rgba(47, 159, 115, .14);
+      border: 1px solid rgba(47, 159, 115, .22);
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: .9rem;
+    }
+
+    h1 {
+      margin: 24px 0 16px;
+      max-width: 760px;
+      font-size: clamp(3.3rem, 7vw, 7rem);
+      line-height: .88;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      max-width: 680px;
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 1.2rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .trust {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      max-width: 660px;
+    }
+
+    .trust div,
+    .feature,
+    .step,
+    .download-card {
+      background: rgba(255, 255, 255, .62);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .trust div {
+      padding: 14px;
+      font-weight: 800;
+    }
+
+    .trust span {
+      display: block;
+      color: var(--muted);
+      font-size: .9rem;
+      font-weight: 650;
+    }
+
+    .terminal {
+      overflow: hidden;
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .terminal-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 42px;
+      padding: 0 14px;
+      background: #1f2937;
+      color: #cbd5e1;
+      font-size: .9rem;
+      font-weight: 800;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--rose);
+    }
+
+    .dot:nth-child(2) {
+      background: var(--gold);
+    }
+
+    .dot:nth-child(3) {
+      background: var(--green);
+      margin-right: 8px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 24px;
+      color: #e5f8f7;
+      white-space: pre-wrap;
+      font: 700 15px/1.55 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1.05em;
+      margin-left: 2px;
+      vertical-align: -.18em;
+      background: var(--gold);
+      animation: blink 1s steps(2, start) infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    section {
+      padding: 88px 0;
+    }
+
+    .section-title {
+      max-width: 760px;
+      margin-bottom: 28px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 4rem);
+      line-height: 1;
+    }
+
+    .section-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.12rem;
+    }
+
+    .features,
+    .steps,
+    .downloads {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .feature,
+    .step,
+    .download-card {
+      padding: 22px;
+    }
+
+    .icon {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      margin-bottom: 18px;
+      color: white;
+      background: var(--blue);
+      border-radius: 8px;
+      font-weight: 900;
+    }
+
+    .feature:nth-child(2) .icon,
+    .step:nth-child(2) .icon {
+      background: var(--green);
+    }
+
+    .feature:nth-child(3) .icon,
+    .step:nth-child(3) .icon {
+      background: var(--rose);
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1.2rem;
+    }
+
+    p {
+      color: var(--muted);
+    }
+
+    .showcase {
+      background: rgba(255, 255, 255, .45);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .command-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: #101827;
+      border-radius: 8px;
+      color: #f8fafc;
+      font: 700 14px "Cascadia Code", Consolas, monospace;
+    }
+
+    .copy {
+      min-width: 76px;
+      min-height: 34px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--gold);
+      color: #2b2105;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    footer {
+      padding: 42px 0;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 880px) {
+      .hero,
+      .features,
+      .steps,
+      .downloads,
+      .trust {
+        grid-template-columns: 1fr;
+      }
+
+      .links {
+        display: none;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="shell" aria-label="Primary navigation">
+      <a class="brand" href="#top" aria-label="Categorax home">
+        <span class="mark"><img src="assets/icons/favicon-48.png" alt=""></span>
+        <span>Categorax</span>
+      </a>
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#download">Download</a>
+        <a class="button" href="#download">Get Categorax</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="shell hero">
+      <div>
+        <img class="hero-logo" src="assets/icons/categorax-logo.png" alt="Categorax app icon">
+        <span class="eyebrow">A kinder way to organize files</span>
+        <h1>Categorax</h1>
+        <p class="lede">Tag files and folders from a beautiful guided terminal menu. No memorizing flags, no confusing popups, just clear choices that help people find things again.</p>
+        <div class="hero-actions">
+          <a class="button" href="#download">Download for your computer</a>
+          <a class="button secondary" href="#demo">See the menu</a>
+        </div>
+        <div class="trust" aria-label="Highlights">
+          <div>1-2-3 menus <span>Choose by number</span></div>
+          <div>Works anywhere <span>Windows, macOS, Linux</span></div>
+          <div>Explorer ready <span>Right-click on Windows</span></div>
+        </div>
+      </div>
+
+      <div class="terminal" id="demo" aria-label="Categorax terminal preview">
+        <div class="terminal-top"><span class="dot"></span><span class="dot"></span><span class="dot"></span>categorax menu</div>
+        <pre id="terminalText"></pre>
+      </div>
+    </div>
+
+    <section id="features">
+      <div class="shell">
+        <div class="section-title">
+          <h2>Built for real people.</h2>
+          <p>Kids, parents, students, office teams, researchers, and careful archivists can all use the same simple flow.</p>
+        </div>
+        <div class="features">
+          <article class="feature">
+            <div class="icon">1</div>
+            <h3>Guided choices</h3>
+            <p>Every action is shown as a numbered option with plain-language hints, so nobody has to remember complicated commands.</p>
+          </article>
+          <article class="feature">
+            <div class="icon">2</div>
+            <h3>Tags and categories</h3>
+            <p>Add many tags, set one clear category, and browse your folders grouped by the labels that matter to you.</p>
+          </article>
+          <article class="feature">
+            <div class="icon">3</div>
+            <h3>Portable storage</h3>
+            <p>Categorax keeps small readable JSON files beside your content, which makes backup, sharing, and inspection straightforward.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase" id="how">
+      <div class="shell">
+        <div class="section-title">
+          <h2>Right-click, choose, done.</h2>
+          <p>On Windows, Categorax can install an Explorer menu. Select files and folders, open Categorax, and follow the friendly terminal.</p>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <div class="icon">A</div>
+            <h3>Select files</h3>
+            <p>Choose one item or a whole group of files and folders in Explorer.</p>
+          </article>
+          <article class="step">
+            <div class="icon">B</div>
+            <h3>Open Categorax</h3>
+            <p>Right-click and pick Categorax, or run it from any terminal.</p>
+          </article>
+          <article class="step">
+            <div class="icon">C</div>
+            <h3>Organize calmly</h3>
+            <p>Add tags, remove old ones, set a category, or browse everything by label.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="shell">
+        <div class="section-title">
+          <h2>Start organizing.</h2>
+          <p>Use the release for your platform, then install the Windows context menu if you want Explorer integration.</p>
+        </div>
+        <div class="downloads">
+          <article class="download-card">
+            <h3>Windows</h3>
+            <p>Download the Windows build, place it somewhere stable, then run the installer command.</p>
+            <div class="command-row"><span>categorax install-context</span><button class="copy" data-copy="categorax install-context">Copy</button></div>
+          </article>
+          <article class="download-card">
+            <h3>macOS</h3>
+            <p>Run Categorax from Terminal and organize any selected path with the same guided menu.</p>
+            <div class="command-row"><span>categorax menu --path ./Documents</span><button class="copy" data-copy="categorax menu --path ./Documents">Copy</button></div>
+          </article>
+          <article class="download-card">
+            <h3>Linux</h3>
+            <p>Use Categorax in your shell, scripts, or desktop launcher of choice.</p>
+            <div class="command-row"><span>categorax browse --root ./</span><button class="copy" data-copy="categorax browse --root ./">Copy</button></div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell">
+      <strong>Categorax</strong> - friendly tags and categories for files and folders.
+    </div>
+  </footer>
+
+  <script>
+    const terminal = document.querySelector("#terminalText");
+    const demo = `CATEGORAX
+Friendly tags and categories for files and folders
+-----------------------------------------------
+
+Selected items
+  1. C:\\Photos\\Summer
+  2. C:\\Docs\\report.pdf
+
+What would you like to do?
+  1. Add tags
+  2. Remove tags
+  3. Set category
+  4. View current details
+  5. Browse by tag/category
+
+Choose a number: 1
+
+Suggested tags
+  1. family
+  2. vacation
+  3. important
+
+Tags to add: 1, vacation 2026`;
+
+    let i = 0;
+    function type() {
+      terminal.innerHTML = demo.slice(0, i).replace(/&/g, "&amp;").replace(/</g, "&lt;") + '<span class="cursor"></span>';
+      i = i >= demo.length ? 0 : i + 1;
+      setTimeout(type, i === 0 ? 1200 : 22);
+    }
+    type();
+
+    document.querySelectorAll(".copy").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(button.dataset.copy);
+        const old = button.textContent;
+        button.textContent = "Copied";
+        setTimeout(() => button.textContent = old, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

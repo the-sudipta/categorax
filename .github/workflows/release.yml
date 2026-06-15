@@ -1,0 +1,133 @@
+name: Build Categorax
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            artifact_name: categorax-windows-x86_64
+            binary: categorax.exe
+          - name: macOS
+            os: macos-latest
+            artifact_name: categorax-macos-arm64
+            binary: categorax
+          - name: Linux
+            os: ubuntu-latest
+            artifact_name: categorax-linux-x86_64
+            binary: categorax
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.artifact_name }}
+          cp target/release/${{ matrix.binary }} dist/${{ matrix.artifact_name }}/
+          cp README.md dist/${{ matrix.artifact_name }}/
+          cp LICENSE dist/${{ matrix.artifact_name }}/
+          cp index.html dist/${{ matrix.artifact_name }}/
+          mkdir -p dist/${{ matrix.artifact_name }}/assets
+          cp -R assets/icons dist/${{ matrix.artifact_name }}/assets/
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            mkdir -p "dist/${{ matrix.artifact_name }}/Categorax.app/Contents/MacOS"
+            mkdir -p "dist/${{ matrix.artifact_name }}/Categorax.app/Contents/Resources"
+            cp target/release/categorax "dist/${{ matrix.artifact_name }}/Categorax.app/Contents/MacOS/Categorax"
+            cp assets/icons/categorax.icns "dist/${{ matrix.artifact_name }}/Categorax.app/Contents/Resources/Categorax.icns"
+            cp packaging/macos/Info.plist "dist/${{ matrix.artifact_name }}/Categorax.app/Contents/Info.plist"
+          fi
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            mkdir -p dist/${{ matrix.artifact_name }}/share/applications
+            mkdir -p dist/${{ matrix.artifact_name }}/share/icons/hicolor/16x16/apps
+            mkdir -p dist/${{ matrix.artifact_name }}/share/icons/hicolor/32x32/apps
+            mkdir -p dist/${{ matrix.artifact_name }}/share/icons/hicolor/48x48/apps
+            mkdir -p dist/${{ matrix.artifact_name }}/share/icons/hicolor/192x192/apps
+            mkdir -p dist/${{ matrix.artifact_name }}/share/icons/hicolor/512x512/apps
+            cp packaging/linux/categorax.desktop dist/${{ matrix.artifact_name }}/share/applications/categorax.desktop
+            cp assets/icons/favicon-16.png dist/${{ matrix.artifact_name }}/share/icons/hicolor/16x16/apps/categorax.png
+            cp assets/icons/favicon-32.png dist/${{ matrix.artifact_name }}/share/icons/hicolor/32x32/apps/categorax.png
+            cp assets/icons/favicon-48.png dist/${{ matrix.artifact_name }}/share/icons/hicolor/48x48/apps/categorax.png
+            cp assets/icons/icon-192.png dist/${{ matrix.artifact_name }}/share/icons/hicolor/192x192/apps/categorax.png
+            cp assets/icons/categorax-logo.png dist/${{ matrix.artifact_name }}/share/icons/hicolor/512x512/apps/categorax.png
+          fi
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          cd dist
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            7z a "${{ matrix.artifact_name }}.zip" "${{ matrix.artifact_name }}"
+          else
+            tar -czf "${{ matrix.artifact_name }}.tar.gz" "${{ matrix.artifact_name }}"
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/${{ matrix.artifact_name }}.zip
+            dist/${{ matrix.artifact_name }}.tar.gz
+          if-no-files-found: ignore
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Categorax ${{ github.ref_name }}"
+          body: |
+            # Categorax ${{ github.ref_name }}
+
+            Categorax is a friendly terminal-first tool for tagging and categorizing files and folders.
+
+            ## Downloads
+
+            - **Windows**: download `categorax-windows-x86_64.zip`
+            - **macOS**: download `categorax-macos-arm64.tar.gz`
+            - **Linux**: download `categorax-linux-x86_64.tar.gz`
+
+            ## Highlights
+
+            - Guided numbered menu for non-programmer-friendly tagging
+            - Tags and one main category for files and folders
+            - Browse folders grouped by tag or category
+            - Windows Explorer right-click integration
+            - Embedded Windows executable icon
+            - macOS app bundle icon assets
+            - Linux desktop launcher icon assets
+
+            ## First Windows Setup
+
+            Put `categorax.exe` somewhere permanent, then run:
+
+            ```powershell
+            .\categorax.exe install-context
+            ```
+
+            After that, right-click files or folders and choose **Categorax**.
+          files: |
+            dist/${{ matrix.artifact_name }}.zip
+            dist/${{ matrix.artifact_name }}.tar.gz

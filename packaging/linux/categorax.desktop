@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Categorax
+Comment=Friendly tags and categories for files and folders
+Exec=categorax
+Icon=categorax
+Terminal=true
+Categories=Utility;FileTools;
+Keywords=tags;category;files;folders;organize;
